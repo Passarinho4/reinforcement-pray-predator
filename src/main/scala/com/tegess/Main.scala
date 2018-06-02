@@ -3,11 +3,12 @@ package com.tegess
 object Main extends App {
 
   clean()
-  for (i <- 0 until 10) {
-    val board =  new Board(10)
-    board.initiate()
+  val board =  new Board(Board.defaultBoardSize)
+  board.initiate()
+  for (i <- 0 until 10000) {
     board.printBoard()
-    Thread.sleep(1000)
+    board.doRound()
+    Thread.sleep(200)
     clean()
   }
 
