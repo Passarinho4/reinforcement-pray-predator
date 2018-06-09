@@ -174,35 +174,35 @@ trait Movable {
     val moves = ArrayBuffer.empty[Move]
     //top
     if (position.row != 0) {
-      moves += Move(Position(position.row - 1, position.col))
+      moves += Move(Position(position.row - 1, position.col), position)
     }
     //top-left
     if (position.row != 0 && position.col != 0) {
-      moves += Move(Position(position.row - 1, position.col - 1))
+      moves += Move(Position(position.row - 1, position.col - 1), position)
     }
     //top-right
     if (position.row != 0 && position.col != Board.defaultBoardSize - 1) {
-      moves += Move(Position(position.row - 1, position.col + 1))
+      moves += Move(Position(position.row - 1, position.col + 1), position)
     }
     //left
     if (position.col != 0) {
-      moves += Move(Position(position.row, position.col - 1))
+      moves += Move(Position(position.row, position.col - 1), position)
     }
     //right
     if (position.col != Board.defaultBoardSize - 1) {
-      moves += Move(Position(position.row, position.col + 1))
+      moves += Move(Position(position.row, position.col + 1), position)
     }
     //down
     if (position.row != Board.defaultBoardSize - 1) {
-      moves += Move(Position(position.row + 1, position.col))
+      moves += Move(Position(position.row + 1, position.col), position)
     }
     //down-left
     if (position.row != Board.defaultBoardSize - 1 && position.col != 0) {
-      moves += Move(Position(position.row + 1, position.col - 1))
+      moves += Move(Position(position.row + 1, position.col - 1), position)
     }
     //down-right
     if (position.row != Board.defaultBoardSize - 1 && position.col != Board.defaultBoardSize - 1) {
-      moves += Move(Position(position.row + 1, position.col + 1))
+      moves += Move(Position(position.row + 1, position.col + 1), position)
     }
     moves.toSeq
   }
@@ -212,7 +212,7 @@ trait Movable {
   }
 }
 
-case class Move(toPosition: Position)
+case class Move(toPosition: Position, fromPosition: Position)
 
 case class Grass(var position: Position) extends Character {
   override val color: Color = Color("green")
