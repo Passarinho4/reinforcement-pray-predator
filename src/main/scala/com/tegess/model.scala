@@ -20,16 +20,46 @@ case class Board(n: Int) {
   }
 
   def checkConstraints() = {
+    def grassConstraint(field: Field) = if (field.containsRabbit()) {
+      field.removeGrass()
+    }
+    def rabbitConstraint(field: Field) = if (field.containsWolf()) {
+      val removedRabbits = field.removeRabbits()
+      rabbits --= removedRabbits
+    }
+    def rabbitBirthConstraint(field: Field) = {
+      for (i <- 0 until field.rabbitPairsCount()) {
+        val f = findEmptyField()
+        val rabbitChild = Rabbit(0, f.position, Utils.ANSI_CYAN)
+        f.addCharacter(rabbitChild)
+        rabbits += rabbitChild
+      }
+    }
+    def wolfBirthConstraint(field: Field) = {
+      for (i <- 0 until field.wolfPairsCount()) {
+        val f = findEmptyField()
+        val wolfChild = Wolf(0, f.position, Utils.ANSI_PURPLE)
+        f.addCharacter(wolfChild)
+        wolfs += wolfChild
+      }
+    }
     for {row <- table
          field <- row} {
-      if (field.containsRabbit()) {
-        field.removeGrass()
-      }
+      grassConstraint(field)
+      rabbitConstraint(field)
+      rabbitBirthConstraint(field)
+      wolfBirthConstraint(field)
+    }
+  }
 
-      if (field.containsWolf()) {
-        val removedRabbits = field.removeRabbits()
-        rabbits --= removedRabbits
-      }
+  @tailrec
+  private def findEmptyField(): Field = {
+    val row = Board.random.nextInt(table.length)
+    val col = Board.random.nextInt(table(row).length)
+    if (table(row)(col).characters.isEmpty) {
+      table(row)(col)
+    } else {
+      findEmptyField()
     }
   }
 
@@ -38,17 +68,6 @@ case class Board(n: Int) {
       for {row <- 0 until n
            column <- 0 until n} {
         table(row)(column) = Field(ArrayBuffer.empty, Position(row, column))
-      }
-    }
-
-    @tailrec
-    def findEmptyField(): Field = {
-      val row = Board.random.nextInt(table.length)
-      val col = Board.random.nextInt(table(row).length)
-      if (table(row)(col).characters.isEmpty) {
-        table(row)(col)
-      } else {
-        findEmptyField()
       }
     }
 
@@ -106,6 +125,10 @@ object Board {
 }
 
 case class Field(var characters: ArrayBuffer[Character], position: Position) {
+
+  def rabbitPairsCount() = characters.collect { case r:Rabbit => r}.size / 2
+  def wolfPairsCount() = characters.collect { case r:Rabbit => r}.size / 2
+
   def containsRabbit() = characters.collect { case r: Rabbit => r }.nonEmpty
 
   def containsWolf() = characters.collect { case w: Wolf => w }.nonEmpty
@@ -196,15 +219,15 @@ case class Grass(var position: Position) extends Character {
   override val letter: String = Utils.ANSI_GREEN + "G" + Utils.ANSI_RESET
 }
 
-case class Rabbit(age: Int, var position: Position) extends Character with Movable {
+case class Rabbit(age: Int, var position: Position, c: String = Utils.ANSI_BLUE) extends Character with Movable {
   override val color: Color = Color("blue")
-  override val letter: String = Utils.ANSI_BLUE + "R" + Utils.ANSI_RESET
+  override val letter: String = c + "R" + Utils.ANSI_RESET
 
 }
 
-case class Wolf(age: Int, var position: Position) extends Character with Movable {
+case class Wolf(age: Int, var position: Position, c: String = Utils.ANSI_RED) extends Character with Movable {
   override val color: Color = Color("red")
-  override val letter: String = Utils.ANSI_RED + "W" + Utils.ANSI_RESET
+  override val letter: String = c + "W" + Utils.ANSI_RESET
 }
 
 case class Color(hex: String) extends AnyVal
