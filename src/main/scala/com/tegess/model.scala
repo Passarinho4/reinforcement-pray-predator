@@ -2,11 +2,15 @@ package com.tegess
 
 import java.util.Random
 
+import com.tegess.szymek.Brain
+
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
-case class Board(n: Int) {
+case class Board(n: Int, brain: Brain) {
   private val table: Array[Array[Field]] = Array.ofDim[Field](n, n)
+
+  private val grasses: ArrayBuffer[Grass] = ArrayBuffer.empty
   private val rabbits: ArrayBuffer[Rabbit] = ArrayBuffer.empty
   private val wolfs: ArrayBuffer[Wolf] = ArrayBuffer.empty
 
@@ -21,7 +25,13 @@ case class Board(n: Int) {
 
   def checkConstraints() = {
     def grassConstraint(field: Field) = if (field.containsRabbit()) {
-      field.removeGrass()
+      val removedGrass = field.removeGrass()
+      if(removedGrass.nonEmpty) {
+        field.characters
+          .collect {case r:Rabbit => r}
+          .foreach { r: Rabbit => r.hungry = 1 }
+      }
+      grasses --= removedGrass
     }
     def rabbitConstraint(field: Field) = if (field.containsWolf()) {
       val removedRabbits = field.removeRabbits()
@@ -30,7 +40,7 @@ case class Board(n: Int) {
     def rabbitBirthConstraint(field: Field) = {
       for (i <- 0 until field.rabbitPairsCount()) {
         val f = findEmptyField()
-        val rabbitChild = Rabbit(0, f.position, Utils.ANSI_CYAN)
+        val rabbitChild = Rabbit(0, f.position, c = Utils.ANSI_CYAN)
         f.addCharacter(rabbitChild)
         rabbits += rabbitChild
       }
@@ -43,12 +53,20 @@ case class Board(n: Int) {
         wolfs += wolfChild
       }
     }
+
+    def rabbitDeathConstraint(field: Field) = {
+      val removedRabbits = field.characters.collect{ case r: Rabbit => r}.filter(_.hungry > 100)
+      field.characters --= removedRabbits
+      rabbits --= removedRabbits
+
+    }
     for {row <- table
          field <- row} {
       grassConstraint(field)
       rabbitConstraint(field)
       rabbitBirthConstraint(field)
       wolfBirthConstraint(field)
+      rabbitDeathConstraint(field)
     }
   }
 
@@ -68,6 +86,15 @@ case class Board(n: Int) {
       for {row <- 0 until n
            column <- 0 until n} {
         table(row)(column) = Field(ArrayBuffer.empty, Position(row, column))
+        if(row < 7 & column < 7) {
+          table(row)(column).characters += Grass(Position(row, column))
+          grasses += Grass(Position(row, column))
+        }
+        if(row > 13 & column >13) {
+          val w = Wolf(0, Position(row, column))
+          table(row)(column).characters += w
+          wolfs += w
+        }
       }
     }
 
@@ -79,7 +106,11 @@ case class Board(n: Int) {
     }
 
     insertEmptyFields()
-    insertRandom((position: Position) => Grass(position), Board.grassInitCount)
+    insertRandom((position: Position) => {
+      val grass = Grass(position)
+      grasses += grass
+      grass
+    }, Board.grassInitCount)
     insertRandom((position: Position) => {
       val rabbit = Rabbit(0, position)
       rabbits += rabbit
@@ -104,30 +135,68 @@ case class Board(n: Int) {
   def doRound(): Unit = {
     for (rabbit <- rabbits) {
       val moves = rabbit.possibleMoves
-      moves.head
-      moveCharacter(rabbit, scala.util.Random.shuffle(moves).head)
+      val profitableMove = brain.getMove(moves, rabbit.position, rabbit.hungry)
+      val beforePosition = rabbit.position
+      moveCharacter(rabbit, profitableMove)
+      brain.update(beforePosition, profitableMove.direction, countProfitability(profitableMove))
     }
     for (wolf <- wolfs) {
       val moves = wolf.possibleMoves
-      moves.head
-      moveCharacter(wolf, scala.util.Random.shuffle(moves).head)
+      //moveCharacter(wolf, scala.util.Random.shuffle(moves).head)
     }
     checkConstraints()
   }
+
+  def countDistance(position1: Position, position2: Position): Double = {
+    Math.sqrt(Math.pow(position2.row - position1.row, 2) + Math.pow(position2.col - position1.col, 2))
+  }
+
+  def countProfitability(move: Move): Int = {
+    def countProfits(position: Position): Int = {
+      val distances = for(grass <- grasses) yield { countDistance(position, grass.position) }
+      distances
+        .take(3)
+        .map(Board.maxDistance - _)
+        .sum
+        .toInt
+    }
+
+    def countLosses(position: Position): Int = {
+      val distances = for(wolf <- wolfs) yield {countDistance(position, wolf.position)}
+      distances
+        .sorted
+        .take(3)
+        .map(Board.maxDistance - _)
+        .sum
+        .toInt
+    }
+
+    val destination = move.toPosition
+
+    val profits = countProfits(destination)
+    val losses = countLosses(destination)
+    profits - losses
+  }
+
+
 }
 
 object Board {
+  val maxDistance = Math.sqrt(2) * defaultBoardSize
   val random: Random = new Random()
   val defaultBoardSize: Int = 20
-  val grassInitCount: Int = 80
+  val grassInitCount: Int = 0
   val rabbitInitCount: Int = 10
-  val wolfInitCount: Int = 5
+  val wolfInitCount: Int = 0
 }
 
 case class Field(var characters: ArrayBuffer[Character], position: Position) {
 
-  def rabbitPairsCount() = characters.collect { case r:Rabbit => r}.size / 2
-  def wolfPairsCount() = characters.collect { case r:Rabbit => r}.size / 2
+  //def rabbitPairsCount() = characters.collect { case r:Rabbit => r}.size / 2
+  def rabbitPairsCount() = 0
+
+  //def wolfPairsCount() = characters.collect { case r:Wolf => r}.size / 2
+  def wolfPairsCount() = 0
 
   def containsRabbit() = characters.collect { case r: Rabbit => r }.nonEmpty
 
@@ -174,35 +243,35 @@ trait Movable {
     val moves = ArrayBuffer.empty[Move]
     //top
     if (position.row != 0) {
-      moves += Move(Position(position.row - 1, position.col), position)
+      moves += Move(Position(position.row - 1, position.col), position, Top)
     }
     //top-left
     if (position.row != 0 && position.col != 0) {
-      moves += Move(Position(position.row - 1, position.col - 1), position)
+      moves += Move(Position(position.row - 1, position.col - 1), position, TopLeft)
     }
     //top-right
     if (position.row != 0 && position.col != Board.defaultBoardSize - 1) {
-      moves += Move(Position(position.row - 1, position.col + 1), position)
+      moves += Move(Position(position.row - 1, position.col + 1), position, TopRight)
     }
     //left
     if (position.col != 0) {
-      moves += Move(Position(position.row, position.col - 1), position)
+      moves += Move(Position(position.row, position.col - 1), position, Left)
     }
     //right
     if (position.col != Board.defaultBoardSize - 1) {
-      moves += Move(Position(position.row, position.col + 1), position)
+      moves += Move(Position(position.row, position.col + 1), position, Right)
     }
     //down
     if (position.row != Board.defaultBoardSize - 1) {
-      moves += Move(Position(position.row + 1, position.col), position)
+      moves += Move(Position(position.row + 1, position.col), position, Down)
     }
     //down-left
     if (position.row != Board.defaultBoardSize - 1 && position.col != 0) {
-      moves += Move(Position(position.row + 1, position.col - 1), position)
+      moves += Move(Position(position.row + 1, position.col - 1), position, DownLeft)
     }
     //down-right
     if (position.row != Board.defaultBoardSize - 1 && position.col != Board.defaultBoardSize - 1) {
-      moves += Move(Position(position.row + 1, position.col + 1), position)
+      moves += Move(Position(position.row + 1, position.col + 1), position, DownRight)
     }
     moves.toSeq
   }
@@ -212,17 +281,52 @@ trait Movable {
   }
 }
 
-case class Move(toPosition: Position, fromPosition: Position)
+trait Direction {
+  val i: Int
+}
+case object TopLeft extends Direction {
+  override val i: Int = 0
+}
+case object Top extends Direction {
+  override val i: Int = 1
+}
+case object TopRight extends Direction {
+  override val i: Int = 2
+}
+case object Right extends Direction {
+  override val i: Int = 3
+}
+case object DownRight extends Direction {
+  override val i: Int = 4
+}
+case object Down extends Direction {
+  override val i: Int = 5
+}
+case object DownLeft extends Direction {
+  override val i: Int = 6
+}
+case object Left extends Direction {
+  override val i: Int = 7
+}
+
+case class Move(toPosition: Position, fromPosition: Position, direction: Direction)
 
 case class Grass(var position: Position) extends Character {
   override val color: Color = Color("green")
   override val letter: String = Utils.ANSI_GREEN + "G" + Utils.ANSI_RESET
 }
 
-case class Rabbit(age: Int, var position: Position, c: String = Utils.ANSI_BLUE) extends Character with Movable {
+case class Rabbit(age: Int,
+                  var position: Position,
+                  var hungry: Int = 1,
+                  c: String = Utils.ANSI_BLUE) extends Character with Movable {
   override val color: Color = Color("blue")
   override val letter: String = c + "R" + Utils.ANSI_RESET
 
+  override def doMove(move: Move): Unit = {
+    super.doMove(move)
+    this.hungry = this.hungry + 1
+  }
 }
 
 case class Wolf(age: Int, var position: Position, c: String = Utils.ANSI_RED) extends Character with Movable {

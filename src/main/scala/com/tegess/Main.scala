@@ -1,16 +1,21 @@
 package com.tegess
 
+import com.tegess.szymek.Brain
+
 object Main extends App {
 
   clean()
-  val board =  new Board(Board.defaultBoardSize)
+  val brain = new Brain(Board.defaultBoardSize)
+  brain.initiateMoves()
+  val board =  new Board(Board.defaultBoardSize, brain)
   board.initiate()
-  for (i <- 0 until 10000) {
+  for (i <- 0 until 300) {
     board.printBoard()
     board.doRound()
-    Thread.sleep(200)
+    Thread.sleep(100)
     clean()
   }
+  brain.printBrain()
 
 
   def clean() = {
